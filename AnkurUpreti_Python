@@ -1,0 +1,81 @@
+#loading necessary dependencies
+import numpy as np
+import pandas as pd 
+import json
+import sys
+
+#Setting Display Environment and Removing False Warnings
+pd.options.display.max_columns = 999
+pd.options.display.max_rows = 999
+pd.options.mode.chained_assignment = None
+
+
+# Reading input_StartOfDay_Positions.txt into a DataFrame
+try: 
+  input_sod_pos_df = pd.read_csv("UBS dataset/Input_StartOfDay_Positions.txt",delimiter=",")
+except NameError:
+  print("File Name is invalid. Please re-run with the correct file name")
+  sys.exit(1)
+except FileNotFoundError:
+  print("File Doesn't Exist.")
+  sys.exit(1)
+else:
+  init_df = input_sod_pos_df.copy()
+  
+
+# Reading 1537277231233_Input_Transactions.txt into a DataFrame
+try: 
+  with open("UBS dataset/1537277231233_Input_Transactions.txt") as json_data:
+    obj = json.load(json_data)
+    input_trans_df = pd.DataFrame(obj, columns=["TransactionId","Instrument","TransactionType","TransactionQuantity"])
+except NameError:
+  print("File Name is invalid. Please re-run with the correct file name")
+  sys.exit(1)
+except FileNotFoundError:
+  print("File Doesn't Exist.")
+  sys.exit(1)
+
+
+# This Function applies TransactionQuantity into matching instrument records in the position file
+def apply_trans_qty(Inst,ttype,tqty):
+  if ttype == 'B':
+    input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'E')] = input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'E')] + tqty 
+    input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'I')] = input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'I')] - tqty  
+  elif ttype == 'S':
+    input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'E')] = input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'E')] - tqty 
+    input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'I')] = input_sod_pos_df['Quantity'][(input_sod_pos_df["Instrument"] == Inst) & (input_sod_pos_df["AccountType"] == 'I')] + tqty 
+  else:
+    print("Invalid Transaction Type !")
+
+
+# This Function returns the Net Transaction Volumes for the day 
+def net_vol():
+    input_sod_pos_df['Delta'] = input_sod_pos_df['Quantity'] - init_df['Quantity']
+    return input_sod_pos_df
+
+
+#Passing each transaction in the Transaction File "1537277231233_Input_Transactions.txt"
+for i in input_trans_df.index:
+  apply_trans_qty(input_trans_df.Instrument[i],input_trans_df.TransactionType[i],input_trans_df.TransactionQuantity[i])
+
+
+#Printing the Expected Output in "Expected_EOD_Positons.txt"
+exp_eod_pos_df = net_vol()
+print(exp_eod_pos_df)
+
+
+#Query : At the end of the process find instruments with the largest and lowest net transaction volumes for the day
+def largest_lowest_net_vol():
+  largestnettransvol_inst = exp_eod_pos_df[exp_eod_pos_df.Delta == exp_eod_pos_df.Delta.abs().max()]['Instrument'].unique()
+  lowestnettransvol_inst = exp_eod_pos_df[exp_eod_pos_df.Delta == exp_eod_pos_df.Delta.abs().min()]['Instrument'].unique()
+  print("Instrument(s) with the Largest Net Volume Change is/are {}".format("".join(largestnettransvol_inst)))
+  print("Instrument(s) with the Lowest Net Volume Change is/are {}".format("".join(lowestnettransvol_inst)))
+
+#Display the Query Result
+largest_lowest_net_vol()
+
+
+
+
+
+
